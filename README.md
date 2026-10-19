@@ -1,38 +1,40 @@
 # Bulgaria Auto CarMarket
 
-Self-hosted платформа за събиране, структуриране, съхранение, обновяване и анализ на
-автомобилни обяви от български сайтове. Проектът е контейнеризиран изцяло и работи без
-външни платени API услуги.
+A self-hosted platform for collecting, normalizing, storing, refreshing, and analyzing
+vehicle listings from Bulgarian websites. The whole project is containerized and runs
+without any paid external API.
 
-> **Важно за достъпа до източниците:** единственият конектор, който е проверен и включен
-> по подразбиране, е **Cars.bg**. Останалите източници са документирани като
-> `NEEDS_PERMISSION` или `BLOCKED` и не се обхождат, докато достъпът не бъде потвърден.
-> Вижте [docs/SOURCES.md](docs/SOURCES.md).
+> **Source access notice:** the only connector that is verified and enabled by default is
+> **Cars.bg**. The remaining sources are documented as `NEEDS_PERMISSION` or `BLOCKED` and
+> are not crawled until access is confirmed. See [docs/SOURCES.md](docs/SOURCES.md)
+> (currently written in Bulgarian).
 
-## Съдържание
+> Българска версия на документацията: [README_BG.md](README_BG.md).
 
-- [Архитектура](#архитектура)
-- [Технологичен стек](#технологичен-стек)
-- [Бърз старт без AI](#бърз-старт-без-ai)
-- [Управление на приложението (start / stop / restart)](#управление-на-приложението-start--stop--restart)
-- [Стартиране с локален AI (Ollama)](#стартиране-с-локален-ai-ollama)
-- [GPU и CPU режим](#gpu-и-cpu-режим)
-- [Източници и разрешен достъп](#източници-и-разрешен-достъп)
-- [Scraping настройки](#scraping-настройки)
-- [AI анализ](#ai-анализ)
+## Table of contents
+
+- [Architecture](#architecture)
+- [Technology stack](#technology-stack)
+- [Quick start without AI](#quick-start-without-ai)
+- [Application management (start / stop / restart)](#application-management-start--stop--restart)
+- [Running with local AI (Ollama)](#running-with-local-ai-ollama)
+- [GPU and CPU mode](#gpu-and-cpu-mode)
+- [Sources and permitted access](#sources-and-permitted-access)
+- [Scraping settings](#scraping-settings)
+- [AI analysis](#ai-analysis)
 - [REST API](#rest-api)
-- [База данни и дедупликация](#база-данни-и-дедупликация)
-- [Надграждане и миграции](#надграждане-и-миграции)
-- [Backup и restore](#backup-и-restore)
-- [Тестове](#тестове)
-- [Проверки и резултати](#проверки-и-резултати)
+- [Database and deduplication](#database-and-deduplication)
+- [Upgrades and migrations](#upgrades-and-migrations)
+- [Backup and restore](#backup-and-restore)
+- [Tests](#tests)
+- [Verification results](#verification-results)
 - [Troubleshooting](#troubleshooting)
-- [Известни ограничения](#известни-ограничения)
-- [Сигурност](#сигурност)
-- [Структура на проекта](#структура-на-проекта)
-- [Лиценз](#лиценз)
+- [Known limitations](#known-limitations)
+- [Security](#security)
+- [Project structure](#project-structure)
+- [License](#license)
 
-## Архитектура
+## Architecture
 
 ```text
                          ┌──────────────────────────────┐
@@ -42,12 +44,12 @@ Self-hosted платформа за събиране, структуриране
                                         │
                          ┌──────────────▼───────────────┐
                          │  backend (FastAPI :8000)      │
-                         │  REST, auth, статистики       │
+                         │  REST, auth, statistics       │
                          └───┬──────────┬──────────┬────┘
                              │          │          │
                   ┌──────────▼──┐  ┌────▼─────┐  ┌─▼─────────────┐
                   │ PostgreSQL  │  │ Redis     │  │ MinIO (S3)    │
-                  │ основна БД  │  │ broker    │  │ снимки/архиви │
+                  │ primary DB  │  │ broker    │  │ images/archive│
                   └─────────────┘  └────┬─────┘  └───────────────┘
                                         │
               ┌─────────────────────────┼─────────────────────────┐
@@ -65,116 +67,119 @@ Self-hosted платформа за събиране, структуриране
                                                         └───────────────────┘
 ```
 
-Услуги в `docker-compose.yml`:
+Services in `docker-compose.yml`:
 
-| Услуга | Роля | Профил |
+| Service | Role | Profile |
 |---|---|---|
 | `frontend` | React dashboard, nginx reverse proxy | core |
-| `backend` | FastAPI, миграции, seed, health | core |
-| `scraper-worker` | Celery worker за `scrape` опашката, Playwright за архиви | core |
-| `scheduler` | Celery beat за периодични задачи | core |
+| `backend` | FastAPI, migrations, seed, health | core |
+| `scraper-worker` | Celery worker for the `scrape` queue, Playwright archives | core |
+| `scheduler` | Celery beat for periodic tasks | core |
 | `postgres` | PostgreSQL 16 | core |
-| `redis` | Redis 7, broker и result backend | core |
+| `redis` | Redis 7, broker and result backend | core |
 | `minio` | S3-compatible object storage | core |
-| `minio-init` | еднократна настройка на правата върху volume-а | core |
-| `ai-worker` | Celery worker за `ai` опашката | `ai` |
-| `ollama` | Локален LLM сървър | `ai` |
+| `minio-init` | one-off volume permission setup | core |
+| `ai-worker` | Celery worker for the `ai` queue | `ai` |
+| `ollama` | Local LLM server | `ai` |
 
-## Технологичен стек
+## Technology stack
 
 - Python 3.12+, FastAPI, SQLAlchemy 2.x, Alembic, Pydantic 2
 - PostgreSQL 16, Redis 7, Celery 5
 - httpx, BeautifulSoup, Playwright
 - React 18, TypeScript, Vite, Tailwind CSS, React Router, lucide-react
 - MinIO (S3-compatible object storage)
-- Ollama с модел **qwen3:4b** (опционален)
-- Docker Engine и Docker Compose
+- Ollama with the **qwen3:4b** model (optional)
+- Docker Engine and Docker Compose
 - pytest
 
-Зависимостите са фиксирани в [`backend/requirements.txt`](backend/requirements.txt) и
+Dependencies are pinned in [`backend/requirements.txt`](backend/requirements.txt) and
 [`frontend/package.json`](frontend/package.json).
 
-> MinIO се стартира от pinned community image `alpine/minio`, защото official
-> `minio/minio` image не е публично достъпен в Docker Hub към момента на проверката.
-> Използваният release е фиксиран и работи като S3-compatible storage.
+> MinIO runs from the pinned community image `alpine/minio` because the official
+> `minio/minio` image was not publicly available on Docker Hub at the time of verification.
+> The release is pinned and works as S3-compatible storage.
 
-## Бърз старт без AI
+## Quick start without AI
 
-Изисквания: Docker Engine 24+, Docker Compose v2, поне ~4 GB свободна RAM за core услугите.
+Requirements: Docker Engine 24+, Docker Compose v2, at least ~4 GB of free RAM for the
+core services.
 
-> Най-бързо: `sh scripts/start.sh` стартира целия стек (core + AI профил) и изчаква
-> health checks. Вижте [Управление на приложението](#управление-на-приложението-start--stop--restart).
+> Fastest path: `sh scripts/start.sh` starts the full stack (core + AI profile) and waits
+> for health checks. See
+> [Application management](#application-management-start--stop--restart).
 
-1. Копирайте примерната конфигурация и сменете всички пароли:
+1. Copy the example configuration and change every password:
 
    ```bash
    cp .env.example .env
    ```
 
-   Генерирайте силен администраторски ключ, например:
+   Generate a strong admin key, for example:
 
    ```bash
    openssl rand -hex 32
    ```
 
-   На Windows PowerShell:
+   On Windows PowerShell:
 
    ```powershell
    -join ((48..57) + (97..102) | Get-Random -Count 64 | ForEach-Object {[char]$_})
    ```
 
-   Сложете стойността в `ADMIN_API_KEY`. Сменете също `POSTGRES_PASSWORD`,
-   `MINIO_ROOT_PASSWORD` и `S3_SECRET_KEY` (последните две трябва да съвпадат).
+   Put the value into `ADMIN_API_KEY`. Also change `POSTGRES_PASSWORD`,
+   `MINIO_ROOT_PASSWORD`, and `S3_SECRET_KEY` (the last two must match).
 
-2. Стартирайте core услугите:
+2. Start the core services:
 
    ```bash
    docker compose up -d --build
    ```
 
-   Тази команда **не** стартира Ollama и ai-worker, защото те са в профил `ai`.
+   This command does **not** start Ollama and ai-worker, because they belong to the `ai`
+   profile.
 
-3. Проверете health checks:
+3. Verify health checks:
 
    ```bash
    docker compose ps
    curl http://localhost:8000/api/health
    ```
 
-4. Отворете:
+4. Open:
 
    - Dashboard: <http://localhost:8080>
    - API docs: <http://localhost:8000/docs>
    - MinIO console: <http://localhost:9001>
 
-5. Въведете администраторския ключ в горната лента на dashboard-а. Ключът се пази
-   само в `sessionStorage` и се изпраща като `X-Admin-Key`.
+5. Enter the admin key in the dashboard's top bar. The key is kept only in
+   `sessionStorage` and is sent as `X-Admin-Key`.
 
-6. От страница **Scraping** стартирайте първия run за Cars.bg. По подразбиране са
-   разрешени 1–2 страници и малък брой обяви, за да не се натоварва сайтът.
+6. Start the first Cars.bg run from the **Scraping** page. The defaults allow 1–2 pages
+   and a small number of listings so the site is not overloaded.
 
-Backend контейнерът изчаква PostgreSQL, изпълнява `alembic upgrade head`, seed-ва
-източниците и AI настройките и едва след това стартира. Workers и scheduler зависят от
-health check-а на backend.
+The backend container waits for PostgreSQL, runs `alembic upgrade head`, seeds sources and
+AI settings, and only then starts. Workers and the scheduler depend on the backend health
+check.
 
-## Управление на приложението (start / stop / restart)
+## Application management (start / stop / restart)
 
-Скриптовете са в [`scripts/`](scripts/) и управляват **целия** стек — core услугите и
-AI профила (`ollama`, `ai-worker`), плюс еднократния `minio-init`.
+The scripts live in [`scripts/`](scripts/) and manage the **entire** stack — the core
+services, the AI profile (`ollama`, `ai-worker`), and the one-off `minio-init` service.
 
 ### Linux / macOS / Git Bash
 
 ```bash
-sh scripts/start.sh              # build + стартира всичко и изчаква health checks
-sh scripts/start.sh --no-build   # стартира без rebuild
-sh scripts/start.sh --restart    # спира всичко и го стартира отново
-sh scripts/start.sh --pull-model # изтегля OLLAMA_MODEL, ако липсва
+sh scripts/start.sh              # build + start everything and wait for health checks
+sh scripts/start.sh --no-build   # start without rebuilding
+sh scripts/start.sh --restart    # stop everything and start it again
+sh scripts/start.sh --pull-model # pull OLLAMA_MODEL if it is missing
 
-sh scripts/stop.sh               # спира и премахва всички контейнери, пази данните
-sh scripts/stop.sh --volumes     # ИЗТРИВА всички volumes (иска потвърждение)
+sh scripts/stop.sh               # stop and remove all containers, keep data
+sh scripts/stop.sh --volumes     # DELETE all volumes (asks for confirmation)
 ```
 
-Ако скриптовете не са изпълними:
+If the scripts are not executable:
 
 ```bash
 chmod +x scripts/start.sh scripts/stop.sh
@@ -192,24 +197,24 @@ powershell -ExecutionPolicy Bypass -File scripts\stop.ps1
 powershell -ExecutionPolicy Bypass -File scripts\stop.ps1 -Volumes
 ```
 
-### Поведение
+### Behavior
 
-- `start` проверява Docker и Docker Compose, създава `.env` от `.env.example`, ако липсва,
-  изгражда и стартира всички услуги, после чака `backend` и `frontend` да отговорят.
-- Моделът **не се изтегля автоматично** при всяко стартиране. Скриптът само отчита дали
-  `qwen3:4b` е наличен; използвайте `--pull-model`/`-PullModel` за изрично изтегляне.
-- `stop` изпълнява `docker compose --profile ai down --remove-orphans`, т.е. спира и
-  премахва контейнерите и мрежата (core + AI), но **запазва** named volumes с PostgreSQL,
-  Redis, MinIO и Ollama данни.
-- `--volumes`/`-Volumes` е деструктивно и изисква потвърждение (или `--yes`/`-Yes`).
-- За рестарт използвайте `--restart`/`-Restart` или последователно `stop` и `start`.
+- `start` checks Docker and Docker Compose, creates `.env` from `.env.example` if missing,
+  builds and starts every service, then waits for `backend` and `frontend` to respond.
+- The model is **not downloaded automatically** on every start. The script only reports
+  whether `qwen3:4b` is available; use `--pull-model`/`-PullModel` for an explicit pull.
+- `stop` runs `docker compose --profile ai down --remove-orphans`, i.e. it stops and
+  removes the containers and network (core + AI) but **preserves** the named volumes with
+  PostgreSQL, Redis, MinIO, and Ollama data.
+- `--volumes`/`-Volumes` is destructive and requires confirmation (or `--yes`/`-Yes`).
+- To restart, use `--restart`/`-Restart` or run `stop` followed by `start`.
 
-## Стартиране с локален AI (Ollama)
+## Running with local AI (Ollama)
 
-AI модулът е **опционален**. При `AI_ENABLED=false` всички scraping, филтри, статистики,
-история и дедупликация работят нормално.
+The AI module is **optional**. With `AI_ENABLED=false`, scraping, filters, statistics,
+history, and deduplication all work normally.
 
-1. Включете AI в `.env`:
+1. Enable AI in `.env`:
 
    ```dotenv
    AI_ENABLED=true
@@ -219,179 +224,180 @@ AI модулът е **опционален**. При `AI_ENABLED=false` вси�
    AI_ANALYZE_IMAGES=false
    ```
 
-   Ако базата вече е създадена, тези стойности не се презаписват автоматично — използвайте
-   страница **AI настройки** в UI.
+   If the database already exists, these values are not overwritten automatically — use
+   the **AI settings** page in the UI.
 
-2. Стартирайте AI профила:
+2. Start the AI profile:
 
    ```bash
    docker compose --profile ai up -d --build
    ```
 
-3. Изтеглете модела **ръчно** (не се изтегля автоматично при всяко стартиране):
+3. Download the model **manually** (it is not pulled automatically on every start):
 
    ```bash
    docker compose exec ollama ollama pull qwen3:4b
    ```
 
-4. Проверете наличните модели:
+4. Check the installed models:
 
    ```bash
    docker compose exec ollama ollama list
    ```
 
-5. В UI отворете **AI настройки** → **Провери връзката**. Очакваното състояние е
-   `достъпен` и `моделът е наличен`. След това включете AI модула и запазете.
+5. In the UI, open **AI settings** → **Check connection**. The expected state is
+   `reachable` and `model available`. Then enable the AI module and save.
 
-6. Стартирайте ръчен анализ. По подразбиране:
-   - модел: `qwen3:4b`
-   - тип: `best_deals`
-   - автоматичен анализ след scraping: **изключен**
-   - включване на описания: **включено**
-   - анализ на снимки: **изключен** (qwen3:4b е текстов модел)
+6. Start a manual analysis. Defaults:
+   - model: `qwen3:4b`
+   - task: `best_deals`
+   - automatic analysis after scraping: **off**
+   - include descriptions: **on**
+   - image analysis: **off** (qwen3:4b is a text model)
 
-AI задачите се изпълняват в отделна `ai` опашка и не блокират scraping-а. При липсващ
-модел, недостъпен Ollama, невалиден JSON или прекъсната задача статусът се записва като
-`failed`/`cancelled`, с ограничени retry опити и exponential backoff.
+AI tasks run in a separate `ai` queue and do not block scraping. A missing model,
+unreachable Ollama, invalid JSON, or an interrupted task results in a
+`failed`/`cancelled` status, with limited retries and exponential backoff.
 
-## GPU и CPU режим
+## GPU and CPU mode
 
-По подразбиране Ollama работи на **CPU** и не изисква NVIDIA GPU. Това е бавно, но
-функционално; не се обещава конкретна скорост.
+By default, Ollama runs on **CPU** and does not require an NVIDIA GPU. It is slow but
+functional; no specific speed is promised.
 
-За NVIDIA GPU:
+For NVIDIA GPU:
 
-1. Инсталирайте NVIDIA driver и NVIDIA Container Toolkit на хоста.
-2. Проверете, че Docker вижда GPU:
+1. Install the NVIDIA driver and NVIDIA Container Toolkit on the host.
+2. Verify that Docker can see the GPU:
    ```bash
    docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
    ```
-3. Стартирайте с допълнителния override:
+3. Start with the additional override:
    ```bash
    docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile ai up -d --build
    ```
 
-Ограничете паралелните inference задачи чрез `AI_MAX_CONCURRENCY` (по подразбиране 1).
-Не се обещава конкретна VRAM употреба; при недостатъчна памет използвайте CPU режим или
-намалете `num_ctx`/броя кандидати.
+Limit parallel inference tasks with `AI_MAX_CONCURRENCY` (default 1). No specific VRAM
+usage is promised; if memory is insufficient, use CPU mode or reduce `num_ctx` and the
+number of candidates.
 
-## Източници и разрешен достъп
+## Sources and permitted access
 
-Пълното проучване е в [docs/SOURCES.md](docs/SOURCES.md). Накратко:
+The full research is in [docs/SOURCES.md](docs/SOURCES.md) (Bulgarian). Summary:
 
-| Източник | Статус | Причина |
+| Source | Status | Reason |
 |---|---|---|
-| Cars.bg | `verified` | robots.txt позволява; HTML структурата е проверена с реални страници |
-| Mobile.bg | `needs_permission` | Общи условия ограничават търговското ползване на данните |
-| Auto.bg | `needs_permission` | Общи условия ограничават търговското ползване на данните |
-| OLX.bg | `blocked` | robots.txt връща HTTP 403 от CloudFront |
-| Bazar.bg | `needs_permission` | robots.txt забранява редица пътища; условията изискват преглед |
-| CarMarket.bg | `needs_permission` | Общи условия забраняват копиране за търговски цели без съгласие |
+| Cars.bg | `verified` | robots.txt allows access; the HTML structure was verified against real pages |
+| Mobile.bg | `needs_permission` | Terms of use restrict commercial use of the data |
+| Auto.bg | `needs_permission` | Terms of use restrict commercial use of the data |
+| OLX.bg | `blocked` | robots.txt returns HTTP 403 from CloudFront |
+| Bazar.bg | `needs_permission` | robots.txt disallows several paths; terms need review |
+| CarMarket.bg | `needs_permission` | Terms of use prohibit copying for commercial purposes without consent |
 
-Опит за включване на източник със статус `needs_permission` или `blocked` през API/UI
-връща HTTP 409. Това е защита, а не бъг. Платформата не заобикаля CAPTCHA, login,
-anti-bot защити или изрични ограничения.
+Attempting to enable a source with `needs_permission` or `blocked` status through the API
+or UI returns HTTP 409. This is a safeguard, not a bug. The platform does not bypass
+CAPTCHA, login, anti-bot protections, or explicit restrictions.
 
-## Scraping настройки
+## Scraping settings
 
-Настройките са на ниво източник и се редактират от **Източници** (изисква admin ключ).
-Бутонът **Провери** извиква `health_check` на конектора; за gated източници връща
-`NEEDS_PERMISSION`/`BLOCKED` без да прави заявка към сайта.
+Settings are per source and are edited from **Sources** (admin key required). The
+**Check** button calls the connector's `health_check`; for gated sources it returns
+`NEEDS_PERMISSION`/`BLOCKED` without making a request to the website.
 
-- `max_concurrency` — паралелни заявки (по подразбиране 1)
-- `requests_per_second` — темпо (по подразбиране 0.5)
+- `max_concurrency` — parallel requests (default 1)
+- `requests_per_second` — request rate (default 0.5)
 - `timeout_seconds`, `retry_limit`, `backoff_seconds`
 - `max_pages_per_run`, `max_listings_per_run`
-- `download_images` — изтегляне в MinIO (по подразбиране **false**)
-- `archive_html` — HTML + screenshot чрез Playwright (по подразбиране **false**;
-  глобалният `ARCHIVE_ENABLED` е само fallback, ако ключът липсва в конфигурацията)
+- `download_images` — download to MinIO (default **false**)
+- `archive_html` — HTML + screenshot via Playwright (default **false**; the global
+  `ARCHIVE_ENABLED` is only a fallback when the key is missing from the configuration)
 
-Допълнително:
+Additionally:
 
-- Преди всеки run се проверява `robots.txt`; при невъзможност за проверка run-ът се
-  проваля (fail closed).
-- Заявките са само към разрешените хостове на източника.
-- Има лимити за размер, брой redirect-и и MIME тип.
-- Scheduler-ът стартира само включени search jobs; по подразбиране seed-натият job е
-  изключен, за да няма неочакван трафик. Включва се и се настройва от **Източници** →
-  **Периодични scraping задачи** (интервал в минути, 5–10080).
-- Ръчен run може да се стартира от **Scraping** с по-малки лимити.
+- `robots.txt` is checked before every run; if it cannot be checked, the run fails
+  (fail closed).
+- Requests go only to the source's allowed hosts.
+- There are limits on response size, redirect count, and MIME type.
+- The scheduler starts only enabled search jobs; the seeded job is disabled by default to
+  avoid unexpected traffic. Enable and configure it from **Sources** → **Scheduled
+  scraping jobs** (interval in minutes, 5–10080).
+- A manual run can be started from **Scraping** with smaller limits.
 
-## AI анализ
+## AI analysis
 
-### Типове анализи
+### Analysis types
 
-- `best_deals` — най-изгодни сделки спрямо сходни автомобили
-- `price_anomalies` — подозрително ниски/високи цени
-- `market_overview` — пазарен преглед по марки, региони, цени и пробег
+- `best_deals` — best value compared with similar vehicles
+- `price_anomalies` — suspiciously low/high prices
+- `market_overview` — market overview by make, region, price, and mileage
 
-### Как работи
+### How it works
 
-1. Филтрира активните обяви в PostgreSQL.
-2. Групира сходни автомобили и изчислява медиани за цена и пробег чрез SQL/Python.
-3. Изчислява статистически score (цена, пробег, пълнота на данните, скорост на обновяване).
-4. Подава ограничен набор от кандидати и статистики към `qwen3:4b`.
-5. Валидира JSON отговора с Pydantic.
-6. Премахва всички непознати listing ID-та и URL адреси; оригиналните URL-и се вземат
-   от базата, не от модела.
-7. Записва резултата в `ai_analysis_runs` заедно с модел, версия на промпта и филтри.
+1. Filters active listings in PostgreSQL.
+2. Groups similar vehicles and computes price and mileage medians through SQL/Python.
+3. Computes a statistical score (price, mileage, data completeness, refresh recency).
+4. Sends a limited candidate set and statistics to `qwen3:4b`.
+5. Validates the JSON response with Pydantic.
+6. Removes every unknown listing ID and URL; original URLs are taken from the database,
+   not from the model.
+7. Stores the result in `ai_analysis_runs` together with the model, prompt version, and
+   filters.
 
-Описанията на обявите се третират като **недоверено съдържание**. Системният промпт
-изрично забранява инструкции от описанията да променят поведението на модела.
+Listing descriptions are treated as **untrusted content**. The system prompt explicitly
+forbids instructions inside descriptions from changing the model's behavior.
 
-### AI настройки в UI
+### AI settings in the UI
 
-- включване/изключване на AI
-- избор на инсталиран Ollama модел
-- проверка на връзката
-- тип анализ по подразбиране
-- автоматичен анализ след scrape run
-- включване на описания
-- анализ на снимки (записва се като изключен; изисква проверен vision модел)
-- ръчно стартиране, история, прогрес, грешки, retry и cancel
+- enable/disable AI
+- choose an installed Ollama model
+- check the connection
+- default analysis type
+- automatic analysis after a scrape run
+- include descriptions
+- image analysis (stored as disabled; requires a verified vision model)
+- manual start, history, progress, errors, retry, and cancel
 
 ## REST API
 
-Всички пътища са с префикс `/api`. Пълната документация е на `/docs`.
+All paths are prefixed with `/api`. Full documentation is available at `/docs`.
 
-| Метод | Път | Описание |
+| Method | Path | Description |
 |---|---|---|
-| GET | `/api/health` | health check (DB, Redis, версия) |
-| GET | `/api/listings` | server-side pagination, сортиране и филтри |
-| GET | `/api/listings/filters` | налични стойности за филтрите |
-| GET | `/api/listings/{id}` | детайли, снимки, източник |
-| GET | `/api/listings/{id}/price-history` | история на цената |
-| GET | `/api/statistics/market` | пазарни статистики |
-| GET | `/api/sources` | източници и статуси |
-| PUT | `/api/sources/{id}` | настройки (admin) |
-| POST | `/api/sources/{id}/health` | проверка на конектора (admin) |
-| GET | `/api/search-jobs` | периодични scraping задачи |
-| PUT | `/api/search-jobs/{id}` | включване/интервал (admin) |
-| GET | `/api/scrape-runs` | история на scraping задачите |
-| POST | `/api/scrape-runs` | ръчен run (admin) |
-| GET | `/api/scrape-runs/{id}` | детайли + грешки |
-| GET | `/api/scrape-runs/{id}/errors` | грешки за run |
-| POST | `/api/scrape-runs/{id}/retry` | повторен run (admin) |
-| GET | `/api/errors` | всички scraper грешки |
-| GET | `/api/dedup/candidates` | кандидати за дубликати |
+| GET | `/api/health` | health check (DB, Redis, version) |
+| GET | `/api/listings` | server-side pagination, sorting, and filters |
+| GET | `/api/listings/filters` | available filter values |
+| GET | `/api/listings/{id}` | details, images, source |
+| GET | `/api/listings/{id}/price-history` | price history |
+| GET | `/api/statistics/market` | market statistics |
+| GET | `/api/sources` | sources and statuses |
+| PUT | `/api/sources/{id}` | settings (admin) |
+| POST | `/api/sources/{id}/health` | connector check (admin) |
+| GET | `/api/search-jobs` | scheduled scraping jobs |
+| PUT | `/api/search-jobs/{id}` | enable/interval (admin) |
+| GET | `/api/scrape-runs` | scraping run history |
+| POST | `/api/scrape-runs` | manual run (admin) |
+| GET | `/api/scrape-runs/{id}` | details + errors |
+| GET | `/api/scrape-runs/{id}/errors` | errors for a run |
+| POST | `/api/scrape-runs/{id}/retry` | retry a run (admin) |
+| GET | `/api/errors` | all scraper errors |
+| GET | `/api/dedup/candidates` | duplicate candidates |
 | POST | `/api/dedup/candidates/{id}/resolve` | resolve (admin) |
-| GET | `/api/ai/settings` | AI настройки |
-| PUT | `/api/ai/settings` | промяна (admin) |
-| GET | `/api/ai/models` | инсталирани Ollama модели |
-| GET | `/api/ai/health` | връзка и наличие на модела |
-| POST | `/api/ai/analyze` | ръчен анализ (admin) |
-| GET | `/api/ai/results` | история на анализите |
-| GET | `/api/ai/jobs/{id}` | статус на задача |
-| GET | `/api/ai/results/{id}` | структуриран резултат |
-| POST | `/api/ai/jobs/{id}/retry` | повторен анализ (admin) |
-| POST | `/api/ai/jobs/{id}/cancel` | отказ (admin) |
+| GET | `/api/ai/settings` | AI settings |
+| PUT | `/api/ai/settings` | update (admin) |
+| GET | `/api/ai/models` | installed Ollama models |
+| GET | `/api/ai/health` | connection and model availability |
+| POST | `/api/ai/analyze` | manual analysis (admin) |
+| GET | `/api/ai/results` | analysis history |
+| GET | `/api/ai/jobs/{id}` | job status |
+| GET | `/api/ai/results/{id}` | structured result |
+| POST | `/api/ai/jobs/{id}/retry` | retry analysis (admin) |
+| POST | `/api/ai/jobs/{id}/cancel` | cancel (admin) |
 
-Административните endpoints изискват header `X-Admin-Key`. Секрети не се връщат в API
-отговори и не се логват.
+Admin endpoints require the `X-Admin-Key` header. Secrets are not returned in API
+responses and are not logged.
 
-## База данни и дедупликация
+## Database and deduplication
 
-Основни таблици:
+Main tables:
 
 - `sources`, `search_jobs`
 - `listings`, `listing_images`, `price_history`, `listing_snapshots`
@@ -399,47 +405,48 @@ anti-bot защити или изрични ограничения.
 - `deduplication_candidates`
 - `ai_analysis_runs`, `ai_settings`
 
-Ключови поведения:
+Key behaviors:
 
-- Уникален индекс по `(source_id, source_listing_id)` за идемпотентен upsert.
-- При промяна на цената се добавя ред в `price_history`; старите цени не се трият.
-- Скритите/премахнатите обяви не се трият автоматично; статусът се сменя на `inactive`
-  след `STALE_LISTING_DAYS` (по подразбиране 14) от scheduled задача.
-- Кандидатите за дубликати се създават при сходни марка/модел/година, цена, пробег и
-  локация. Resolution не трие история; маркира обявата като `duplicate` и пази връзка.
-- Канонична при resolve е обявата от проверен източник.
+- A unique index on `(source_id, source_listing_id)` enables idempotent upserts.
+- A price change appends a row to `price_history`; old prices are never deleted.
+- Hidden/removed listings are not deleted automatically; their status changes to
+  `inactive` after `STALE_LISTING_DAYS` (default 14) via a scheduled task.
+- Duplicate candidates are created for similar make/model/year, price, mileage, and
+  location. Resolution does not delete history; it marks the listing as `duplicate` and
+  keeps the link.
+- The canonical listing on resolution is the one from a verified source.
 
-Миграциите са в [`backend/alembic/versions`](backend/alembic/versions). Backend контейнерът
-изпълнява `alembic upgrade head` при стартиране.
+Migrations live in [`backend/alembic/versions`](backend/alembic/versions). The backend
+container runs `alembic upgrade head` at startup.
 
-### Надграждане и миграции
+## Upgrades and migrations
 
-1. Направете backup (вижте [Backup и restore](#backup-и-restore)).
-2. Обновете кода и при нужда добавете новите ключове от `.env.example` в `.env`.
-3. Изградете и стартирайте отново:
+1. Create a backup (see [Backup and restore](#backup-and-restore)).
+2. Update the code and add any new keys from `.env.example` to `.env` if needed.
+3. Rebuild and start:
    ```bash
    docker compose up -d --build
    ```
-4. Backend контейнерът изчаква PostgreSQL и изпълнява `alembic upgrade head` преди
-   стартиране. Проверете:
+4. The backend container waits for PostgreSQL and runs `alembic upgrade head` before
+   starting. Verify:
    ```bash
    docker compose logs backend
    curl http://localhost:8000/api/health
    ```
-5. При AI профил: `docker compose --profile ai up -d --build`.
+5. With the AI profile: `docker compose --profile ai up -d --build`.
 
-Alembic downgrade не се препоръчва при production данни; използвайте backup/restore
-при нужда от връщане назад.
+Alembic downgrade is not recommended with production data; use backup/restore when you
+need to roll back.
 
-## Backup и restore
+## Backup and restore
 
-Примерни скриптове:
+Example scripts:
 
 Linux/macOS/Git Bash:
 
 ```bash
 scripts/backup.sh
-# създава ./backups/<UTC timestamp>/postgres.dump и minio-data
+# creates ./backups/<UTC timestamp>/postgres.dump and minio-data
 ```
 
 ```bash
@@ -453,18 +460,18 @@ powershell -ExecutionPolicy Bypass -File scripts\backup.ps1
 powershell -ExecutionPolicy Bypass -File scripts\restore.ps1 -Source .\backups\<UTC timestamp>
 ```
 
-Restore-ът спира application услугите, възстановява PostgreSQL с `pg_restore --clean
---if-exists`, копира MinIO данните и стартира услугите отново. Ако използвате AI,
-стартирайте след restore с `docker compose --profile ai up -d`.
+Restore stops the application services, restores PostgreSQL with `pg_restore --clean
+--if-exists`, copies the MinIO data, and starts the services again. If you use AI, start
+with `docker compose --profile ai up -d` after the restore.
 
-Препоръки:
+Recommendations:
 
-- Правете backup преди всяка миграция.
-- Проверявайте backup-а на отделна инстанция.
-- Пазете `.env` и паролите извън Git.
-- За production използвайте TLS reverse proxy пред frontend контейнера.
+- Create a backup before every migration.
+- Verify the backup on a separate instance.
+- Keep `.env` and passwords out of Git.
+- For production, put a TLS reverse proxy in front of the frontend container.
 
-## Тестове
+## Tests
 
 Backend:
 
@@ -485,160 +492,165 @@ npm ci
 npm run build
 ```
 
-Docker конфигурация:
+Docker configuration:
 
 ```bash
 docker compose config --quiet
 ```
 
-Live smoke test за проверения конектор (само при разрешен достъп и с интернет):
+Live smoke test for the verified connector (only with permitted access and internet):
 
 ```bash
 python scripts/verify_cars_bg.py
 ```
 
-Тестовете покриват:
+The tests cover:
 
-- парсване на локални Cars.bg HTML fixtures
-- нормализиране, цена, пробег, гориво, мощност
-- дедупликация
-- история на цените и идемпотентен upsert
-- валидация на AI резултати и премахване на халюцинации
-- Ollama недостъпен/липсващ модел/невалиден JSON
-- API, admin guard-ове и AI_ENABLED=false
-- Alembic миграция върху SQLite
-- Compose услуги, профили, health checks и non-root потребители
+- parsing local Cars.bg HTML fixtures
+- normalization, price, mileage, fuel, power
+- deduplication
+- price history and idempotent upsert
+- AI result validation and hallucination removal
+- unreachable Ollama, missing model, invalid JSON
+- API, admin guards, and `AI_ENABLED=false`
+- Alembic migration on SQLite
+- Compose services, profiles, health checks, and non-root users
 
-## Проверки и резултати
+## Verification results
 
-Проверено в тази среда на 2026-10-19:
+Verified in this environment on 2026-10-19:
 
 - `pytest -q` → **34 passed**
-- `npm run build` → успешен production build (TypeScript + Vite)
-- `docker compose config --quiet` → успешна валидация
-- `docker compose up -d --build` → core услугите са `healthy`:
+- `npm run build` → successful production build (TypeScript + Vite)
+- `docker compose config --quiet` → successful validation
+- `docker compose up -d --build` → core services are `healthy`:
   `backend`, `frontend`, `scraper-worker`, `scheduler`, `postgres`, `redis`, `minio`
-- `docker compose --profile ai up -d` → `ollama` и `ai-worker` са `healthy`
-- `docker compose exec ollama ollama pull qwen3:4b` → моделът е изтеглен (2.5 GB)
+- `docker compose --profile ai up -d` → `ollama` and `ai-worker` are `healthy`
+- `docker compose exec ollama ollama pull qwen3:4b` → model downloaded (2.5 GB)
 - `GET /api/ai/health` → `reachable=true`, `model_available=true`
-- `python scripts/verify_cars_bg.py` → robots allow, search HTTP 200, 20 карти,
-  оферта HTTP 200, нормализирани 2009 / 2300 EUR / 265000 км / 6 снимки
-- Ръчен Cars.bg scrape (1 страница, максимум 2 обяви) → **2 нови обяви, 0 грешки,
-  3 HTTP заявки, 4.64 s**, реални URL адреси и снимки
-- Изтегляне на снимки в MinIO → **10 downloaded изображения**, 40 стари metadata записа
-  със статус `skipped`; в bucket-а има 12 обекта (снимки + HTML/screenshot архив)
-- Playwright archive → успешен snapshot с HTML и PNG в MinIO
-- `docker compose exec scraper-worker python` + Playwright Chromium → успешен launch
-- Scheduler тест → run с `triggered_by=scheduler`, 1 обява, 0 грешки (job-ът е изключен
-  отново след проверката)
-- Concurrency тест (`max_concurrency=2`, 2 обяви) → 2 нови обяви, 0 грешки
-- Ръчен AI анализ `best_deals` с qwen3:4b на CPU → **completed за 109.8 s**, 2 кандидата,
-  валиден JSON, 0 validation warnings, оригиналните URL адреси са взети от базата
-- Recovery тест → прекъснат AI run е маркиран като `failed` при рестарт на worker-а
-- `scripts/backup.ps1` → успешен `postgres.dump` + копие на MinIO data
-- След проверката AI модулът е върнат на `enabled=false` (ръчен режим по подразбиране)
+- `python scripts/verify_cars_bg.py` → robots allow, search HTTP 200, 20 cards,
+  offer HTTP 200, normalized 2009 / 2300 EUR / 265000 km / 6 images
+- Manual Cars.bg scrape (1 page, max 2 listings) → **2 new listings, 0 errors,
+  3 HTTP requests, 4.64 s**, real URLs and images
+- Image download to MinIO → **10 downloaded images**, 40 older metadata rows with
+  `skipped` status; the bucket contains 12 objects (images + HTML/screenshot archive)
+- Playwright archive → successful snapshot with HTML and PNG in MinIO
+- `docker compose exec scraper-worker python` + Playwright Chromium → successful launch
+- Scheduler test → run with `triggered_by=scheduler`, 1 listing, 0 errors (the job was
+  disabled again after the check)
+- Concurrency test (`max_concurrency=2`, 2 listings) → 2 new listings, 0 errors
+- Manual AI analysis `best_deals` with qwen3:4b on CPU → **completed in 109.8 s**,
+  2 candidates, valid JSON, 0 validation warnings, original URLs taken from the database
+- Recovery test → an interrupted AI run was marked `failed` when the worker restarted
+- `scripts/backup.ps1` → successful `postgres.dump` + MinIO data copy
+- After verification, the AI module was returned to `enabled=false` (manual mode by
+  default)
 
-> AI inference на CPU е бавен (наблюдавани ~11 токена/сек в тази среда). Това не е
-> гаранция за скорост и не се обещава конкретна производителност.
+> AI inference on CPU is slow (~11 tokens/sec observed in this environment). This is not
+> a speed guarantee and no specific performance is promised.
 
 ## Troubleshooting
 
-### Backend не стартира / `database not ready`
+### Backend does not start / `database not ready`
 
-- Проверете `docker compose ps` и health-а на `postgres`.
-- Уверете се, че `POSTGRES_PASSWORD` в `.env` съвпада с паролата в `DATABASE_URL`.
-- Вижте логовете: `docker compose logs -f backend postgres`.
+- Check `docker compose ps` and the `postgres` health.
+- Make sure `POSTGRES_PASSWORD` in `.env` matches the password in `DATABASE_URL`.
+- Inspect the logs: `docker compose logs -f backend postgres`.
 
 ### `Object storage is not ready`
 
-- Проверете `minio` health и console на <http://localhost:9001>.
-- `S3_ACCESS_KEY`/`S3_SECRET_KEY` трябва да съвпадат с `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD`.
-- Ако bucket липсва, backend го създава при стартиране.
+- Check the `minio` health and console at <http://localhost:9001>.
+- `S3_ACCESS_KEY`/`S3_SECRET_KEY` must match `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD`.
+- If the bucket is missing, the backend creates it at startup.
 
-### AI: `моделът липсва`
+### AI: `model is missing`
 
 ```bash
 docker compose exec ollama ollama list
 docker compose exec ollama ollama pull qwen3:4b
 ```
 
-Моделът не се изтегля автоматично. Ако Ollama е стартиран без профил `ai`, AI worker-ът
-също не работи.
+The model is not downloaded automatically. If Ollama was started without the `ai` profile,
+the AI worker is not running either.
 
-### AI задача стои в `pending`
+### AI job stays in `pending`
 
-- Проверете дали `ai-worker` е стартиран: `docker compose --profile ai ps`.
-- Проверете Redis и health-а на worker-а.
-- Вижте `docker compose logs -f ai-worker`.
+- Check whether `ai-worker` is running: `docker compose --profile ai ps`.
+- Check Redis and the worker health.
+- Inspect `docker compose logs -f ai-worker`.
 
-### `401` при admin действия
+### `401` on admin actions
 
-- Въведете `ADMIN_API_KEY` в горната лента на UI.
-- Ключът се пази само в текущата сесия; след презареждане на tab-а може да трябва да се въведе отново.
+- Enter `ADMIN_API_KEY` in the UI's top bar.
+- The key is kept only for the current session; after reloading the tab you may need to
+  enter it again.
 
 ### Port conflicts
 
-Променете `BACKEND_PORT`, `FRONTEND_PORT`, `MINIO_PORT`, `MINIO_CONSOLE_PORT` в `.env`.
-Ollama не е публикуван на хоста; достъпът е само през Docker мрежата, за да няма конфликти
-с други локални Ollama инстанции.
+Change `BACKEND_PORT`, `FRONTEND_PORT`, `MINIO_PORT`, and `MINIO_CONSOLE_PORT` in `.env`.
+Ollama is not published on the host; it is reachable only through the Docker network, to
+avoid conflicts with other local Ollama instances.
 
-## Известни ограничения
+## Known limitations
 
-- Само Cars.bg е проверен и включен. Другите източници изискват разрешение или са блокирани.
-- Няма заобикаляне на CAPTCHA, login, anti-bot защити или платени API-та.
-- qwen3:4b е текстов модел; анализът на снимки е изключен.
-- Качеството на AI анализа зависи от локалния модел и наличните данни; резултатът не е
-  техническа експертиза и не гарантира състоянието на автомобила.
-- Локалният AI на CPU може да бъде бавен; паралелността е ограничена.
-- Scheduler-ът не стартира автоматично scraping, докато не включите search job.
-- Няма вградено управление на потребители; административният достъп е с API ключ.
-- Няма автоматично изтегляне на Ollama модела.
-- Платформата е предназначена за личен/self-hosted анализ; спазвайте условията на всеки
-  източник и приложимото законодателство.
+- Only Cars.bg is verified and enabled. The other sources require permission or are
+  blocked.
+- There is no bypassing of CAPTCHA, login, anti-bot protections, or paid APIs.
+- qwen3:4b is a text model; image analysis is disabled.
+- AI analysis quality depends on the local model and available data; the result is not a
+  technical inspection and does not guarantee the vehicle's condition.
+- Local AI on CPU can be slow; concurrency is limited.
+- The scheduler does not start scraping automatically until you enable a search job.
+- There is no built-in user management; administrative access uses an API key.
+- There is no automatic download of the Ollama model.
+- The platform is intended for personal/self-hosted analysis; respect each source's terms
+  and applicable law.
 
-## Сигурност
+## Security
 
-- Всички тайни са в environment variables; `.env` е в `.gitignore`.
-- Admin endpoints изискват `X-Admin-Key`; сравнението е с `secrets.compare_digest`.
-- Backend, worker и frontend контейнерите работят с non-root потребители.
-- SSRF защита: само http/https, проверка на DNS резолюция, забрана на private/loopback/
-  link-local адреси, ограничени redirect-и.
-- Ограничения за размер на HTML, снимки и архиви; проверка на MIME тип.
-- Снимките и архивите се изключени по подразбиране и се включват изрично.
-- Архивираният HTML се съхранява само в object storage и не се сервира/изпълнява от
-  приложението.
-- Логовете са structured JSON и не съдържат тайни, cookies или токени.
-- Nginx добавя security headers и проксира само `/api/`.
+- All secrets are environment variables; `.env` is in `.gitignore`.
+- Admin endpoints require `X-Admin-Key`; comparison uses `secrets.compare_digest`.
+- Backend, worker, and frontend containers run as non-root users.
+- SSRF protection: only http/https, DNS resolution checks, private/loopback/link-local
+  addresses are rejected, redirects are limited.
+- Size limits for HTML, images, and archives; MIME type checks.
+- Images and archives are disabled by default and must be enabled explicitly.
+- Archived HTML is stored only in object storage and is not served or executed by the
+  application.
+- Logs are structured JSON and do not contain secrets, cookies, or tokens.
+- Nginx adds security headers and proxies only `/api/`.
 
-## Структура на проекта
+## Project structure
 
 ```text
 backend/
   app/
-    api/           REST endpoints и dependencies
-    connectors/    интерфейс, robots gate, Cars.bg и gated модули
+    api/           REST endpoints and dependencies
+    connectors/    interface, robots gate, Cars.bg and gated modules
     core/          config, logging, security
     db/            engine, session, Base
-    models/        SQLAlchemy модели
-    schemas/       Pydantic схеми
+    models/        SQLAlchemy models
+    schemas/       Pydantic schemas
     services/      scraping, dedup, images, storage, AI, statistics
     tasks/         Celery app, scrape/ai/scheduler tasks
     main.py        FastAPI app
-    seed.py        начални източници и AI настройки
-  alembic/         миграции
-  tests/           unit/integration/API/migration/compose тестове
+    seed.py        initial sources and AI settings
+  alembic/         migrations
+  tests/           unit/integration/API/migration/compose tests
 frontend/
   src/
-    api/           fetch client и TypeScript типове
-    components/    Layout, Badge, PriceChart, Pagination и др.
+    api/           fetch client and TypeScript types
+    components/    Layout, Badge, PriceChart, Pagination, etc.
     pages/         Dashboard, Listings, Sources, Scraping, AI, Errors, Dedup
 scripts/           start, stop, backup, restore, live verify
 docs/              SOURCES.md
 docker-compose.yml
 docker-compose.gpu.yml
 .env.example
+README.md          English documentation (this file)
+README_BG.md       Bulgarian documentation
 ```
 
-## Лиценз
+## License
 
-MIT. Вижте [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

@@ -12,5 +12,6 @@
 **/*.db
 **/*.sqlite3
 README.md
+README_BG.md
 docs
 scripts
