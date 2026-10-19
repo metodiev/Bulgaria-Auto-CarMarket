@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Filter, LayoutGrid, List, RotateCcw, Search } from "lucide-react";
+import { ChevronDown, Filter, LayoutGrid, List, RotateCcw, Search } from "lucide-react";
 import { api, buildQuery, formatApiError } from "../api/client";
 import type { Listing, ListingFilterOptions, Page } from "../api/types";
 import Badge from "../components/Badge";
@@ -61,6 +61,7 @@ export default function Listings() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"table" | "gallery">("table");
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   useEffect(() => {
     api<ListingFilterOptions>("/listings/filters")
@@ -95,6 +96,7 @@ export default function Listings() {
   const applyFilters = () => {
     setFilters({ ...draft });
     setPage(1);
+    setFiltersOpen(false);
   };
 
   const resetFilters = () => {
@@ -106,11 +108,29 @@ export default function Listings() {
   return (
     <div className="space-y-5">
       <section className="card p-4">
-        <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">
-          <Filter size={16} className="text-accent" /> Филтри
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-sm font-semibold text-white">
+            <Filter size={16} className="text-accent" /> Филтри
+          </div>
+          <button
+            type="button"
+            className="btn-ghost px-2.5 py-1 text-xs md:hidden"
+            onClick={() => setFiltersOpen((current) => !current)}
+            aria-expanded={filtersOpen}
+            aria-controls="listing-filters"
+          >
+            {filtersOpen ? "Скрий" : "Покажи"}
+            <ChevronDown
+              size={15}
+              className={`transition-transform ${filtersOpen ? "rotate-180" : ""}`}
+            />
+          </button>
         </div>
         <form
-          className="grid gap-3 md:grid-cols-2 xl:grid-cols-4"
+          id="listing-filters"
+          className={`grid gap-3 md:grid-cols-2 xl:grid-cols-4 ${
+            filtersOpen ? "" : "hidden md:grid"
+          }`}
           onSubmit={(event) => {
             event.preventDefault();
             applyFilters();

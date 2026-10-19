@@ -19,7 +19,10 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     admin_api_key: str = "change-me-in-production"
-    cors_origins: str = "http://localhost:5173,http://localhost:8080"
+    cors_origins: str = (
+        "http://localhost:5173,http://localhost:8080,"
+        "capacitor://localhost,http://localhost,https://localhost"
+    )
 
     database_url: str = (
         "postgresql+psycopg://carmarket:carmarket@localhost:5432/carmarket"

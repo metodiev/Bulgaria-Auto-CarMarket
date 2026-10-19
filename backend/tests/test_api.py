@@ -13,6 +13,20 @@ def test_health(client) -> None:
     assert body["status"] in {"ok", "degraded"}
 
 
+def test_mobile_cors_origins(client) -> None:
+    for origin in ("capacitor://localhost", "http://localhost", "https://localhost"):
+        response = client.options(
+            "/api/health",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "X-Admin-Key",
+            },
+        )
+        assert response.status_code == 200
+        assert response.headers.get("access-control-allow-origin") == origin
+
+
 def test_sources_and_admin_guards(client, sources) -> None:
     response = client.get("/api/sources")
     assert response.status_code == 200

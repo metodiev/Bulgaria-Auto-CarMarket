@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
   Bot,
@@ -10,10 +10,14 @@ import {
   LayoutDashboard,
   ListChecks,
   Menu,
+  Server,
   Sparkles,
   X,
 } from "lucide-react";
 import { getAdminKey, setAdminKey } from "../api/client";
+import { apiBaseLabel, getStoredApiBase, isNativeApp } from "../api/server";
+import { useAndroidBackButton } from "../lib/useAndroidBackButton";
+import ServerSettings from "./ServerSettings";
 
 const navigation = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -40,7 +44,20 @@ const pageTitles: Record<string, string> = {
 export default function Layout() {
   const [open, setOpen] = useState(false);
   const [key, setKey] = useState(getAdminKey());
+  const [serverOpen, setServerOpen] = useState(false);
+  const [serverLabel, setServerLabel] = useState("Сървър");
   const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const stored = getStoredApiBase();
+    setServerLabel(
+      stored ? apiBaseLabel(stored) : isNativeApp() ? "Задайте сървър" : "Сървър",
+    );
+    if (isNativeApp() && !stored) {
+      setServerOpen(true);
+    }
+  }, []);
   const title =
     pageTitles[location.pathname] ??
     (location.pathname.startsWith("/listings/")
@@ -48,6 +65,26 @@ export default function Layout() {
       : location.pathname.startsWith("/ai/results/")
         ? "AI резултат"
         : "Bulgaria Auto CarMarket");
+  const serverRequired = isNativeApp() && !getStoredApiBase();
+
+  useAndroidBackButton(() => {
+    if (serverOpen) {
+      if (serverRequired) return false;
+      setServerOpen(false);
+      return true;
+    }
+    if (open) {
+      setOpen(false);
+      return true;
+    }
+    if (location.pathname === "/") return false;
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      navigate("/", { replace: true });
+    }
+    return true;
+  });
 
   const saveKey = () => {
     setAdminKey(key.trim());
@@ -55,9 +92,9 @@ export default function Layout() {
   };
 
   return (
-    <div className="min-h-screen lg:grid lg:grid-cols-[260px_1fr]">
+    <div className="app-shell min-h-screen lg:grid lg:grid-cols-[260px_1fr]">
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-[260px] border-r border-edge/60 bg-ink/95 px-4 py-5 backdrop-blur transition-transform lg:static lg:translate-x-0 ${
+        className={`fixed bottom-[env(safe-area-inset-bottom)] left-0 top-[env(safe-area-inset-top)] z-40 w-[260px] border-r border-edge/60 bg-ink/95 px-4 py-5 backdrop-blur transition-transform lg:static lg:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -95,10 +132,26 @@ export default function Layout() {
         </nav>
 
         <div className="mt-8 rounded-xl border border-edge/60 bg-panel/60 p-3 text-xs leading-relaxed text-slate-400">
-          <div className="mb-1 flex items-center gap-2 font-semibold text-slate-200">
+          <div className="mb-2 flex items-center gap-2 font-semibold text-slate-200">
             <KeyRound size={14} /> Admin ключ
           </div>
-          Ключът се пази само в тази сесия и се изпраща като <code>X-Admin-Key</code>.
+          <input
+            type="password"
+            value={key}
+            onChange={(event) => setKey(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") saveKey();
+            }}
+            placeholder="Admin API ключ"
+            className="input w-full py-1.5 text-xs"
+            aria-label="Admin API ключ"
+          />
+          <button onClick={saveKey} className="btn-ghost mt-2 w-full justify-center px-3 py-1.5 text-xs">
+            Запази ключа
+          </button>
+          <p className="mt-2">
+            Ключът се пази само в тази сесия и се изпраща като <code>X-Admin-Key</code>.
+          </p>
         </div>
       </aside>
 
@@ -126,20 +179,15 @@ export default function Layout() {
                 Self-hosted пазарни данни, история на цените и локален AI анализ
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="password"
-                value={key}
-                onChange={(event) => setKey(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") saveKey();
-                }}
-                placeholder="Admin API ключ"
-                className="input w-44 py-1.5 text-xs sm:w-56"
-                aria-label="Admin API ключ"
-              />
-              <button onClick={saveKey} className="btn-ghost px-3 py-1.5 text-xs">
-                Запази
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setServerOpen(true)}
+                className="btn-ghost px-2.5 py-1.5 text-xs sm:px-3"
+                title="Настройки на сървъра"
+                aria-label="Настройки на сървъра"
+              >
+                <Server size={14} />
+                <span className="hidden max-w-[130px] truncate sm:inline">{serverLabel}</span>
               </button>
             </div>
           </div>
@@ -152,6 +200,12 @@ export default function Layout() {
           Bulgaria Auto CarMarket · self-hosted · уважава правилата на източниците
         </footer>
       </div>
+
+      <ServerSettings
+        open={serverOpen}
+        onClose={() => setServerOpen(false)}
+        required={serverRequired}
+      />
     </div>
   );
 }

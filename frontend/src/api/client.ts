@@ -1,4 +1,5 @@
-const API_BASE = import.meta.env.VITE_API_BASE ?? "/api";
+import { getApiBase, getStoredApiBase, isNativeApp } from "./server";
+
 const ADMIN_KEY_STORAGE = "carmarket.adminKey";
 
 export class ApiError extends Error {
@@ -35,6 +36,13 @@ export function buildQuery(
 }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  if (isNativeApp() && !getStoredApiBase()) {
+    throw new ApiError(
+      0,
+      "Адресът на сървъра не е зададен. Отворете „Сървър“ в горната лента и въведете URL.",
+    );
+  }
+
   const headers = new Headers(init.headers);
   if (init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
@@ -43,7 +51,16 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (adminKey) {
     headers.set("X-Admin-Key", adminKey);
   }
-  const response = await fetch(`${API_BASE}${path}`, { ...init, headers });
+
+  let response: Response;
+  try {
+    response = await fetch(`${getApiBase()}${path}`, { ...init, headers });
+  } catch {
+    throw new ApiError(
+      0,
+      "Няма връзка със сървъра. Проверете адреса, мрежата и дали backend-ът работи.",
+    );
+  }
   if (!response.ok) {
     let message = `HTTP ${response.status}`;
     try {

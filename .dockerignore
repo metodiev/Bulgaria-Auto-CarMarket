@@ -7,6 +7,9 @@
 **/.venv
 **/node_modules
 **/dist
+**/*.tsbuildinfo
+android
+ios
 **/.pytest_cache
 **/.coverage
 **/*.db

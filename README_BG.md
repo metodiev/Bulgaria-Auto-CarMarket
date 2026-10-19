@@ -17,6 +17,7 @@ Self-hosted платформа за събиране, структуриране
 - [Технологичен стек](#технологичен-стек)
 - [Бърз старт без AI](#бърз-старт-без-ai)
 - [Управление на приложението (start / stop / restart)](#управление-на-приложението-start--stop--restart)
+- [Мобилни приложения (Android и iOS)](#мобилни-приложения-android-и-ios)
 - [Стартиране с локален AI (Ollama)](#стартиране-с-локален-ai-ollama)
 - [GPU и CPU режим](#gpu-и-cpu-режим)
 - [Източници и разрешен достъп](#източници-и-разрешен-достъп)
@@ -53,7 +54,10 @@ flowchart TD
         OLLAMA["ollama :11434<br/>qwen3:4b"]
     end
 
+    MOBILE["Android / iOS приложения<br/>Capacitor WebView<br/>адрес на сървъра при старт"]
+
     UI -->|"HTTP /api"| API
+    MOBILE -->|"REST /api"| API
     API --> DB
     API -->|"заявки/график"| REDIS
     API -->|"проверка на bucket"| MINIO
@@ -204,6 +208,150 @@ powershell -ExecutionPolicy Bypass -File scripts\stop.ps1 -Volumes
   Redis, MinIO и Ollama данни.
 - `--volumes`/`-Volumes` е деструктивно и изисква потвърждение (или `--yes`/`-Yes`).
 - За рестарт използвайте `--restart`/`-Restart` или последователно `stop` и `start`.
+
+## Мобилни приложения (Android и iOS)
+
+Native мобилните обвивки са генерирани с **Capacitor 8** и се намират в
+[`android/`](android/) и [`ios/`](ios/). Те използват отново React dashboard-а и
+комуникират със същия FastAPI backend през REST, без дублиран UI код.
+
+### Адрес на сървъра по време на изпълнение
+
+Адресът на self-hosted backend-а се задава при стартиране, а не се вгражда в приложението:
+
+- При първо стартиране на native приложението диалогът **Сървър** се отваря автоматично.
+- Въведете root или API URL, например `http://192.168.1.10:8000` или
+  `https://carmarket.example.com/api`. Липсващият `/api` суфикс се добавя автоматично.
+- В Android емулатора хост машината е достъпна на `http://10.0.2.2:8000`; на физическо
+  устройство използвайте LAN IP адреса на хоста.
+- Адресът се пази в `localStorage` и може да се промени по-късно от бутона **Сървър** в
+  горната лента.
+- Уеб build-ът продължава да използва относителния `/api`; задайте `VITE_API_BASE` при
+  build, ако API-то е на друг origin.
+- Backend CORS позволява `capacitor://localhost`, `http://localhost` и `https://localhost`
+  — origin-ите на Capacitor WebView.
+
+Използвайте HTTPS извън локална разработка. Генерираните native проекти разрешават
+cleartext HTTP, защото платформата е предназначена за self-hosted сървъри в локална
+мрежа; при публичен store build с HTTPS-only backend премахнете
+`android:usesCleartextTraffic` и iOS ATS изключението.
+
+### Предварителни изисквания
+
+- Node.js 20+ и `npm`
+- Android: JDK 21, Android Studio, Android SDK Platform 36, Build-Tools 36
+- iOS: macOS с Xcode 16+ (iOS проектът не може да се build-ва на Windows)
+- Достъпен работещ backend, например `docker compose up -d --build`
+
+### Синхронизиране на web активите
+
+От `frontend/`:
+
+```bash
+npm ci
+npm run mobile:sync          # build на web + sync за двете платформи
+npm run mobile:android       # build и sync само за Android
+npm run mobile:ios           # build и sync само за iOS (препоръчително на macOS)
+```
+
+### Build и стартиране на Android
+
+Отворете проекта в Android Studio:
+
+```bash
+cd frontend
+npm run mobile:android:open
+```
+
+Или build-нете debug APK от командния ред:
+
+```bash
+cd android
+# Windows
+gradlew.bat assembleDebug
+# Linux / macOS
+./gradlew assembleDebug
+```
+
+APK-то се записва в `android/app/build/outputs/apk/debug/app-debug.apk`.
+
+Debug APK-то в това repository е build-нато с JDK 21 и Android SDK 36 и е тествано на
+Android 36 емулатор: първоначална настройка на сървъра, dashboard данни, обяви и
+навигация с hardware back бутона работят. От емулатора използвайте
+`http://10.0.2.2:8000`; на физическо устройство използвайте LAN IP адреса на хоста.
+
+Изисквания за CLI build: `JAVA_HOME` сочи към JDK 21, `ANDROID_HOME` или
+`ANDROID_SDK_ROOT` сочи към SDK с Platform 36 и Build-Tools 36, а
+`android/local.properties` съдържа `sdk.dir=...`, ако SDK-то не се открива автоматично.
+Capacitor копира web build-а в APK-то при `cap sync`.
+
+За release build конфигурирайте signing в `android/app/build.gradle` (или Android Studio)
+и изпълнете `gradlew.bat bundleRelease` / `./gradlew bundleRelease` за AAB.
+
+### Build и стартиране на iOS
+
+На macOS с Xcode:
+
+```bash
+cd frontend
+npm run mobile:ios
+npm run mobile:ios:open
+```
+
+В Xcode изберете target `App`, задайте development team за подписване, проверете bundle
+identifier `bg.carmarket.app` и стартирайте на симулатор или устройство. Deployment
+target е iOS 15.0. Увеличете `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` преди
+App Store release.
+
+iOS проектът, app metadata, `Info.plist` и SPM пакетът са генерирани и се синхронизират,
+но компилирането и стартирането изискват macOS с Xcode; те не са изпълнени на Windows
+машината, използвана за Android проверката.
+
+### Native скриптове за стартиране и спиране
+
+Помощните скриптове в [`scripts/`](scripts/) обхващат native build/run/stop процеса:
+
+| Действие | macOS / Linux | Windows |
+| --- | --- | --- |
+| Стартиране на Android | `sh scripts/start-android.sh` | `powershell -File .\scripts\start-android.ps1` |
+| Спиране на Android | `sh scripts/stop-android.sh` | `powershell -File .\scripts\stop-android.ps1` |
+| Стартиране на iOS | `sh scripts/start-ios.sh` | само macOS |
+| Спиране на iOS | `sh scripts/stop-ios.sh` | само macOS |
+
+- `start-android` build-ва web активите и debug APK-то, стартира емулатор, ако няма
+  свързано устройство, изчаква да зареди и после инсталира и стартира приложението.
+  Скриптът **не** стартира Docker; за backend използвайте `scripts/start.sh`.
+  Опции: `--avd NAME`, `--device SERIAL`, `--headless`, `--no-build`, `--no-install`,
+  `--wait SECONDS`.
+- `stop-android` спира приложението и изключва работещите емулатори. С
+  `--keep-emulator` емулаторът остава включен.
+- `start-ios` изисква macOS с Xcode 16+. Build-ва приложението, стартира симулатор и го
+  инсталира и отваря. Опции: `--device NAME|UDID`, `--no-build`, `--no-install`.
+- `stop-ios` спира приложението и изключва стартираните симулатори. С
+  `--keep-simulator` те остават включени.
+
+PowerShell скриптовете приемат същите опции с едно тире (`-Avd`, `-Device`,
+`-Headless`, `-NoBuild`, `-NoInstall`, `-WaitSeconds`).
+
+От Android емулатора използвайте `http://10.0.2.2:8000`; iOS симулаторът може да
+използва `http://localhost:8000`.
+
+### Native конфигурация
+
+- Име: **Bulgaria Auto CarMarket**; app ID / bundle ID: `bg.carmarket.app`.
+  Променете ги в [`frontend/capacitor.config.ts`](frontend/capacitor.config.ts) и
+  обновете native проектите (или добавете платформите отново) при нужда от други
+  идентификатори.
+- Android: `android/app/src/main/AndroidManifest.xml` съдържа
+  `android:usesCleartextTraffic="true"` за self-hosted HTTP сървъри.
+- iOS: `ios/App/App/Info.plist` съдържа `NSAppTransportSecurity` изключение по същата
+  причина.
+- Генерираните web asset папки (`android/app/src/main/assets/public`,
+  `ios/App/App/public`) са в `.gitignore` и се пресъздават от `npm run mobile:sync`.
+- Android hardware back бутонът първо затваря диалога за сървър или навигационното
+  меню, после минава назад през SPA историята и затваря приложението само от dashboard
+  началото.
+- Push notifications, deep links и store metadata все още не са включени.
 
 ## Стартиране с локален AI (Ollama)
 
@@ -633,8 +781,11 @@ frontend/
     api/           fetch client и TypeScript типове
     components/    Layout, Badge, PriceChart, Pagination и др.
     pages/         Dashboard, Listings, Sources, Scraping, AI, Errors, Dedup
-scripts/           start, stop, backup, restore, live verify
+scripts/           start, stop, Android/iOS lifecycle, backup, restore, live verify
 docs/              SOURCES.md
+android/           Capacitor Android проект (Gradle, Android Studio)
+ios/               Capacitor iOS проект (Xcode, Swift Package Manager)
+frontend/capacitor.config.ts
 docker-compose.yml
 docker-compose.gpu.yml
 .env.example

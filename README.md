@@ -17,6 +17,7 @@ without any paid external API.
 - [Technology stack](#technology-stack)
 - [Quick start without AI](#quick-start-without-ai)
 - [Application management (start / stop / restart)](#application-management-start--stop--restart)
+- [Mobile apps (Android and iOS)](#mobile-apps-android-and-ios)
 - [Running with local AI (Ollama)](#running-with-local-ai-ollama)
 - [GPU and CPU mode](#gpu-and-cpu-mode)
 - [Sources and permitted access](#sources-and-permitted-access)
@@ -53,7 +54,10 @@ flowchart TD
         OLLAMA["ollama :11434<br/>qwen3:4b"]
     end
 
+    MOBILE["Android / iOS apps<br/>Capacitor WebView<br/>runtime server URL"]
+
     UI -->|"HTTP /api"| API
+    MOBILE -->|"REST /api"| API
     API --> DB
     API -->|"enqueue tasks"| REDIS
     API -->|"bucket check"| MINIO
@@ -207,6 +211,148 @@ powershell -ExecutionPolicy Bypass -File scripts\stop.ps1 -Volumes
   PostgreSQL, Redis, MinIO, and Ollama data.
 - `--volumes`/`-Volumes` is destructive and requires confirmation (or `--yes`/`-Yes`).
 - To restart, use `--restart`/`-Restart` or run `stop` followed by `start`.
+
+## Mobile apps (Android and iOS)
+
+Native mobile shells are generated with **Capacitor 8** and live in the top-level
+[`android/`](android/) and [`ios/`](ios/) folders. They reuse the React dashboard and talk
+to the same FastAPI backend over REST, so there is no duplicate UI codebase.
+
+### Runtime server URL
+
+The self-hosted backend address is configured at runtime, not baked into the app:
+
+- On first launch in a native app, the **Server** dialog opens automatically.
+- Enter a server root or API URL, e.g. `http://192.168.1.10:8000` or
+  `https://carmarket.example.com/api`. A missing `/api` suffix is added automatically.
+- In the Android emulator the host machine is reachable at `http://10.0.2.2:8000`; on a
+  physical device use the host's LAN IP instead.
+- The address is stored in `localStorage` and can be changed later from the **Server**
+  button in the top bar.
+- The web build keeps using the relative `/api` path; set `VITE_API_BASE` at build time if
+  the API is hosted on a different origin.
+- Backend CORS allows `capacitor://localhost`, `http://localhost`, and `https://localhost`,
+  which are the Capacitor WebView origins.
+
+Use HTTPS for anything beyond local development. The generated native projects allow
+cleartext HTTP because the platform targets self-hosted servers on a LAN; for a public
+store build with an HTTPS-only backend, remove `android:usesCleartextTraffic` and the iOS
+ATS exception described below.
+
+### Prerequisites
+
+- Node.js 20+ and `npm`
+- Android: JDK 21, Android Studio, Android SDK Platform 36, Build-Tools 36
+- iOS: macOS with Xcode 16+ (the iOS project cannot be built on Windows)
+- A reachable running backend, e.g. `docker compose up -d --build`
+
+### Sync web assets
+
+From `frontend/`:
+
+```bash
+npm ci
+npm run mobile:sync          # build the web app and sync both platforms
+npm run mobile:android       # build and sync Android only
+npm run mobile:ios           # build and sync iOS only (macOS recommended)
+```
+
+### Build and run Android
+
+Open the project in Android Studio:
+
+```bash
+cd frontend
+npm run mobile:android:open
+```
+
+Or build a debug APK from the command line:
+
+```bash
+cd android
+# Windows
+gradlew.bat assembleDebug
+# Linux / macOS
+./gradlew assembleDebug
+```
+
+The APK is written to `android/app/build/outputs/apk/debug/app-debug.apk`.
+
+This repository's debug APK was built with JDK 21 and Android SDK 36 and exercised on an
+Android 36 emulator: first-run server setup, dashboard data, listings, and hardware back
+navigation all work. Use `http://10.0.2.2:8000` from the emulator; a physical device uses
+the host's LAN IP.
+
+Requirements for the CLI build: `JAVA_HOME` points to JDK 21, `ANDROID_HOME` or
+`ANDROID_SDK_ROOT` points to an SDK with Platform 36 and Build-Tools 36, and
+`android/local.properties` contains `sdk.dir=...` if the SDK is not auto-detected.
+Capacitor copies the web build into the APK during `cap sync`.
+
+For a release build, configure signing in `android/app/build.gradle` (or Android Studio)
+and run `gradlew.bat bundleRelease` / `./gradlew bundleRelease` to produce an AAB.
+
+### Build and run iOS
+
+On macOS with Xcode:
+
+```bash
+cd frontend
+npm run mobile:ios
+npm run mobile:ios:open
+```
+
+In Xcode select the `App` target, choose a development team for signing, verify the
+bundle identifier `bg.carmarket.app`, and run on a simulator or device. The deployment
+target is iOS 15.0. Increase `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` before an
+App Store release.
+
+The iOS project, app metadata, `Info.plist`, and SPM package are generated and kept in
+sync, but compiling and running it requires macOS with Xcode; it was not built on the
+Windows development machine used for the Android verification.
+
+### Native app lifecycle scripts
+
+Helpers in [`scripts/`](scripts/) wrap the native build/run/stop flow:
+
+| Task | macOS / Linux | Windows |
+| --- | --- | --- |
+| Start Android | `sh scripts/start-android.sh` | `powershell -File .\scripts\start-android.ps1` |
+| Stop Android | `sh scripts/stop-android.sh` | `powershell -File .\scripts\stop-android.ps1` |
+| Start iOS | `sh scripts/start-ios.sh` | macOS only |
+| Stop iOS | `sh scripts/stop-ios.sh` | macOS only |
+
+- `start-android` builds the web assets and debug APK, starts an emulator when no device
+  is connected, waits for boot, then installs and launches the app. It does **not** start
+  Docker; run `scripts/start.sh` for the backend.
+  Flags: `--avd NAME`, `--device SERIAL`, `--headless`, `--no-build`, `--no-install`,
+  `--wait SECONDS`.
+- `stop-android` force-stops the app and shuts down running emulators. Use
+  `--keep-emulator` to leave the emulator running.
+- `start-ios` requires macOS with Xcode 16+. It builds the app, boots a simulator, then
+  installs and launches it. Flags: `--device NAME|UDID`, `--no-build`, `--no-install`.
+- `stop-ios` stops the app and shuts down booted simulators. Use `--keep-simulator` to
+  leave them running.
+
+PowerShell scripts use the same options with single-dash names (`-Avd`, `-Device`,
+`-Headless`, `-NoBuild`, `-NoInstall`, `-WaitSeconds`).
+
+From the Android emulator use `http://10.0.2.2:8000`; the iOS Simulator can use
+`http://localhost:8000`.
+
+### Native configuration notes
+
+- App name: **Bulgaria Auto CarMarket**; app ID / bundle ID: `bg.carmarket.app`.
+  Change them in [`frontend/capacitor.config.ts`](frontend/capacitor.config.ts) and update
+  the native projects (or re-add the platforms) if you need different identifiers.
+- Android: `android/app/src/main/AndroidManifest.xml` contains
+  `android:usesCleartextTraffic="true"` for self-hosted HTTP servers.
+- iOS: `ios/App/App/Info.plist` contains an `NSAppTransportSecurity` exception for the
+  same reason.
+- The generated web asset folders (`android/app/src/main/assets/public`,
+  `ios/App/App/public`) are ignored by Git and recreated by `npm run mobile:sync`.
+- The Android hardware back button closes the server dialog or navigation drawer first,
+  then walks the SPA history, and exits the app only from the dashboard root.
+- Push notifications, deep links, and store metadata are not included yet.
 
 ## Running with local AI (Ollama)
 
@@ -641,8 +787,11 @@ frontend/
     api/           fetch client and TypeScript types
     components/    Layout, Badge, PriceChart, Pagination, etc.
     pages/         Dashboard, Listings, Sources, Scraping, AI, Errors, Dedup
-scripts/           start, stop, backup, restore, live verify
+scripts/           start, stop, Android/iOS lifecycle, backup, restore, live verify
 docs/              SOURCES.md
+android/           Capacitor Android project (Gradle, Android Studio)
+ios/               Capacitor iOS project (Xcode, Swift Package Manager)
+frontend/capacitor.config.ts
 docker-compose.yml
 docker-compose.gpu.yml
 .env.example

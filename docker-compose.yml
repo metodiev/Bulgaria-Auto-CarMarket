@@ -4,7 +4,7 @@ x-backend-env: &backend-env
   APP_ENV: ${APP_ENV:-production}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
   ADMIN_API_KEY: ${ADMIN_API_KEY:-change-me-use-a-long-random-value}
-  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://localhost:5173}
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://localhost:5173,capacitor://localhost,http://localhost,https://localhost}
   DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-carmarket}:${POSTGRES_PASSWORD:-change-me-postgres-password}@postgres:5432/${POSTGRES_DB:-carmarket}
   REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
   CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}

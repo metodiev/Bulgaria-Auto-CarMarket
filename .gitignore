@@ -16,6 +16,7 @@ htmlcov/
 node_modules/
 dist/
 .vite/
+*.tsbuildinfo
 
 # Databases and local artifacts
 *.db
