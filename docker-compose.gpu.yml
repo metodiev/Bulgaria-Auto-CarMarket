@@ -1,0 +1,6 @@
+# Optional NVIDIA GPU override. Requires NVIDIA Container Toolkit on the host.
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile ai up -d --build
+services:
+  ollama:
+    gpus: all
