@@ -36,35 +36,34 @@ without any paid external API.
 
 ## Architecture
 
-```text
-                         ┌──────────────────────────────┐
-                         │  frontend (React + Vite)      │
-                         │  nginx :8080, /api proxy      │
-                         └──────────────┬───────────────┘
-                                        │
-                         ┌──────────────▼───────────────┐
-                         │  backend (FastAPI :8000)      │
-                         │  REST, auth, statistics       │
-                         └───┬──────────┬──────────┬────┘
-                             │          │          │
-                  ┌──────────▼──┐  ┌────▼─────┐  ┌─▼─────────────┐
-                  │ PostgreSQL  │  │ Redis     │  │ MinIO (S3)    │
-                  │ primary DB  │  │ broker    │  │ images/archive│
-                  └─────────────┘  └────┬─────┘  └───────────────┘
-                                        │
-              ┌─────────────────────────┼─────────────────────────┐
-              │                         │                         │
-   ┌──────────▼──────────┐   ┌──────────▼──────────┐   ┌─────────▼─────────┐
-   │ scraper-worker      │   │ scheduler            │   │ ai-worker         │
-   │ Celery queue scrape │   │ Celery beat           │   │ Celery queue ai   │
-   │ Playwright archive  │   │ due search jobs       │   │ profile: ai       │
-   └─────────────────────┘   └──────────────────────┘   └─────────┬─────────┘
-                                                                  │
-                                                        ┌─────────▼─────────┐
-                                                        │ ollama :11434     │
-                                                        │ qwen3:4b          │
-                                                        │ profile: ai       │
-                                                        └───────────────────┘
+```mermaid
+flowchart TD
+    subgraph core["Core services"]
+        UI["frontend<br/>React + Vite<br/>nginx :8080 · /api proxy"]
+        API["backend<br/>FastAPI :8000<br/>REST · auth · statistics"]
+        DB[("PostgreSQL<br/>primary database")]
+        REDIS[("Redis<br/>broker + result backend")]
+        MINIO[("MinIO (S3)<br/>images + archives")]
+        SCRAPER["scraper-worker<br/>Celery queue: scrape<br/>Playwright archives"]
+        SCHEDULER["scheduler<br/>Celery beat<br/>due search jobs"]
+    end
+
+    subgraph ai["AI profile (optional)"]
+        AIWORKER["ai-worker<br/>Celery queue: ai"]
+        OLLAMA["ollama :11434<br/>qwen3:4b"]
+    end
+
+    UI -->|"HTTP /api"| API
+    API --> DB
+    API -->|"enqueue tasks"| REDIS
+    API -->|"bucket check"| MINIO
+    SCHEDULER -->|"enqueue due runs"| REDIS
+    REDIS -->|"scrape tasks"| SCRAPER
+    REDIS -->|"AI tasks"| AIWORKER
+    SCRAPER --> DB
+    SCRAPER --> MINIO
+    AIWORKER --> DB
+    AIWORKER --> OLLAMA
 ```
 
 Services in `docker-compose.yml`:

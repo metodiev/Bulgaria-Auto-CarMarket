@@ -36,35 +36,34 @@ Self-hosted платформа за събиране, структуриране
 
 ## Архитектура
 
-```text
-                         ┌──────────────────────────────┐
-                         │  frontend (React + Vite)      │
-                         │  nginx :8080, /api proxy      │
-                         └──────────────┬───────────────┘
-                                        │
-                         ┌──────────────▼───────────────┐
-                         │  backend (FastAPI :8000)      │
-                         │  REST, auth, статистики       │
-                         └───┬──────────┬──────────┬────┘
-                             │          │          │
-                  ┌──────────▼──┐  ┌────▼─────┐  ┌─▼─────────────┐
-                  │ PostgreSQL  │  │ Redis     │  │ MinIO (S3)    │
-                  │ основна БД  │  │ broker    │  │ снимки/архиви │
-                  └─────────────┘  └────┬─────┘  └───────────────┘
-                                        │
-              ┌─────────────────────────┼─────────────────────────┐
-              │                         │                         │
-   ┌──────────▼──────────┐   ┌──────────▼──────────┐   ┌─────────▼─────────┐
-   │ scraper-worker      │   │ scheduler            │   │ ai-worker         │
-   │ Celery queue scrape │   │ Celery beat           │   │ Celery queue ai   │
-   │ Playwright archive  │   │ due search jobs       │   │ profile: ai       │
-   └─────────────────────┘   └──────────────────────┘   └─────────┬─────────┘
-                                                                  │
-                                                        ┌─────────▼─────────┐
-                                                        │ ollama :11434     │
-                                                        │ qwen3:4b          │
-                                                        │ profile: ai       │
-                                                        └───────────────────┘
+```mermaid
+flowchart TD
+    subgraph core["Основни услуги"]
+        UI["frontend<br/>React + Vite<br/>nginx :8080 · /api proxy"]
+        API["backend<br/>FastAPI :8000<br/>REST · auth · статистики"]
+        DB[("PostgreSQL<br/>основна база")]
+        REDIS[("Redis<br/>broker + result backend")]
+        MINIO[("MinIO (S3)<br/>снимки + архиви")]
+        SCRAPER["scraper-worker<br/>Celery опашка: scrape<br/>Playwright архиви"]
+        SCHEDULER["scheduler<br/>Celery beat<br/>периодични задачи"]
+    end
+
+    subgraph ai["AI профил (опционален)"]
+        AIWORKER["ai-worker<br/>Celery опашка: ai"]
+        OLLAMA["ollama :11434<br/>qwen3:4b"]
+    end
+
+    UI -->|"HTTP /api"| API
+    API --> DB
+    API -->|"заявки/график"| REDIS
+    API -->|"проверка на bucket"| MINIO
+    SCHEDULER -->|"планирани run-ове"| REDIS
+    REDIS -->|"scrape задачи"| SCRAPER
+    REDIS -->|"AI задачи"| AIWORKER
+    SCRAPER --> DB
+    SCRAPER --> MINIO
+    AIWORKER --> DB
+    AIWORKER --> OLLAMA
 ```
 
 Услуги в `docker-compose.yml`:
