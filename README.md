@@ -14,6 +14,7 @@ Self-hosted платформа за събиране, структуриране
 - [Архитектура](#архитектура)
 - [Технологичен стек](#технологичен-стек)
 - [Бърз старт без AI](#бърз-старт-без-ai)
+- [Управление на приложението (start / stop / restart)](#управление-на-приложението-start--stop--restart)
 - [Стартиране с локален AI (Ollama)](#стартиране-с-локален-ai-ollama)
 - [GPU и CPU режим](#gpu-и-cpu-режим)
 - [Източници и разрешен достъп](#източници-и-разрешен-достъп)
@@ -101,6 +102,9 @@ Self-hosted платформа за събиране, структуриране
 
 Изисквания: Docker Engine 24+, Docker Compose v2, поне ~4 GB свободна RAM за core услугите.
 
+> Най-бързо: `sh scripts/start.sh` стартира целия стек (core + AI профил) и изчаква
+> health checks. Вижте [Управление на приложението](#управление-на-приложението-start--stop--restart).
+
 1. Копирайте примерната конфигурация и сменете всички пароли:
 
    ```bash
@@ -152,6 +156,53 @@ Self-hosted платформа за събиране, структуриране
 Backend контейнерът изчаква PostgreSQL, изпълнява `alembic upgrade head`, seed-ва
 източниците и AI настройките и едва след това стартира. Workers и scheduler зависят от
 health check-а на backend.
+
+## Управление на приложението (start / stop / restart)
+
+Скриптовете са в [`scripts/`](scripts/) и управляват **целия** стек — core услугите и
+AI профила (`ollama`, `ai-worker`), плюс еднократния `minio-init`.
+
+### Linux / macOS / Git Bash
+
+```bash
+sh scripts/start.sh              # build + стартира всичко и изчаква health checks
+sh scripts/start.sh --no-build   # стартира без rebuild
+sh scripts/start.sh --restart    # спира всичко и го стартира отново
+sh scripts/start.sh --pull-model # изтегля OLLAMA_MODEL, ако липсва
+
+sh scripts/stop.sh               # спира и премахва всички контейнери, пази данните
+sh scripts/stop.sh --volumes     # ИЗТРИВА всички volumes (иска потвърждение)
+```
+
+Ако скриптовете не са изпълними:
+
+```bash
+chmod +x scripts/start.sh scripts/stop.sh
+```
+
+### Windows PowerShell
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\start.ps1
+powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -NoBuild
+powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -Restart
+powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -PullModel
+
+powershell -ExecutionPolicy Bypass -File scripts\stop.ps1
+powershell -ExecutionPolicy Bypass -File scripts\stop.ps1 -Volumes
+```
+
+### Поведение
+
+- `start` проверява Docker и Docker Compose, създава `.env` от `.env.example`, ако липсва,
+  изгражда и стартира всички услуги, после чака `backend` и `frontend` да отговорят.
+- Моделът **не се изтегля автоматично** при всяко стартиране. Скриптът само отчита дали
+  `qwen3:4b` е наличен; използвайте `--pull-model`/`-PullModel` за изрично изтегляне.
+- `stop` изпълнява `docker compose --profile ai down --remove-orphans`, т.е. спира и
+  премахва контейнерите и мрежата (core + AI), но **запазва** named volumes с PostgreSQL,
+  Redis, MinIO и Ollama данни.
+- `--volumes`/`-Volumes` е деструктивно и изисква потвърждение (или `--yes`/`-Yes`).
+- За рестарт използвайте `--restart`/`-Restart` или последователно `stop` и `start`.
 
 ## Стартиране с локален AI (Ollama)
 
@@ -581,7 +632,7 @@ frontend/
     api/           fetch client и TypeScript типове
     components/    Layout, Badge, PriceChart, Pagination и др.
     pages/         Dashboard, Listings, Sources, Scraping, AI, Errors, Dedup
-scripts/           backup, restore, live verify
+scripts/           start, stop, backup, restore, live verify
 docs/              SOURCES.md
 docker-compose.yml
 docker-compose.gpu.yml
